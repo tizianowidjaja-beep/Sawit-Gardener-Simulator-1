@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sawit Gardener Simulator 2045</title>
+    <link href="https://googleapis.com" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Poppins', sans-serif; background-color: #0b140d; color: #e0e7e1; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .game-container { width: 100%; max-width: 450px; background: linear-gradient(145deg, #112214, #0d1a10); border: 2px solid #00ff66; border-radius: 20px; padding: 25px; box-shadow: 0 0 25px rgba(0, 255, 102, 0.2); display: flex; flex-direction: column; gap: 20px; }
+        .game-header { display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 10px; border: 1px solid #1f3a23; }
+        .stats-label { font-family: 'Orbitron', sans-serif; font-size: 13px; color: #8da390; }
+        .stats-val { color: #00ff66; font-weight: bold; }
+        .garden-plot { background: #070d08; border: 2px dashed #27422b; border-radius: 15px; height: 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; margin: 10px 0; overflow: hidden; }
+        .sawit-icon { font-size: 60px; transition: transform 0.3s ease; }
+        .growth-bar-container { width: 80%; background: #1a3322; height: 10px; border-radius: 5px; margin-top: 15px; border: 1px solid #27422b; overflow: hidden; }
+        .growth-bar { width: 10%; background: linear-gradient(90deg, #00cc52, #00ff66); height: 100%; transition: width 0.4s ease; }
+        .status-text { font-family: 'Orbitron', sans-serif; font-size: 12px; margin-top: 5px; color: #00ff66; letter-spacing: 1px; }
+        .controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .btn-action { background: linear-gradient(145deg, #16351b, #112615); color: #ffffff; border: 1px solid #385e3c; border-radius: 12px; padding: 14px; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; transition: all 0.2s ease; }
+        .btn-action:hover { border-color: #00ff66; background: #183d1f; box-shadow: 0 0 10px rgba(0, 255, 102, 0.2); }
+        .btn-action:disabled { opacity: 0.4; cursor: not-allowed; border-color: #27422b; }
+        .btn-harvest { grid-column: span 2; background: linear-gradient(90deg, #00cc52, #00ff66); color: #050a06; font-family: 'Orbitron', sans-serif; font-weight: 700; border: none; font-size: 14px; display: none; }
+        .btn-harvest.active { display: flex; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(0, 255, 102, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(0, 255, 102, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 255, 102, 0); } }
+        .alert-msg { padding: 12px; border-radius: 10px; font-size: 12px; text-align: center; background: rgba(0, 255, 102, 0.05); border: 1px solid #27422b; min-height: 42px; display: flex; align-items: center; justify-content: center; color: #a3b8a4; }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <div class="game-header">
+            <div class="stats-label">💰 Koin: <span id="coin-val" class="stats-val">0</span></div>
+            <div class="stats-label">🌿 Eco-Score: <span id="eco-val" class="stats-val">95</span></div>
+        </div>
+
+        <div class="garden-plot">
+            <div id="sawit-stage" class="sawit-icon">🌱</div>
+            <div id="plant-status" class="status-text">BIBIT BARU</div>
+            <div class="growth-bar-container">
+                <div id="growth-progress" class="growth-bar"></div>
+            </div>
+        </div>
+
+        <div id="game-alert" class="alert-msg">Silakan siram atau pupuk tanaman sawit Anda agar tumbuh!</div>
+
+        <div class="controls-grid">
+            <button id="btn-water" class="btn-action">💧 Siram Air</button>
+            <button id="btn-fertilize" class="btn-action">🧫 Beri Pupuk</button>
+            <button id="btn-harvest" class="btn-action btn-harvest">🚜 PANEN BUAH SAWIT</button>
+        </div>
+    </div>
+
+    <script>
+        let koin = 0;
+        let ecoScore = 95;
+        let progresPertumbuhan = 10;
+        let tahapStatus = 1; // 1: Bibit, 2: Sawit Muda, 3: Pohon Raksasa Berbuah
+
+        const sawitStageIcon = document.getElementById("sawit-stage");
+        const plantStatusText = document.getElementById("plant-status");
+        const growthProgressBar = document.getElementById("growth-progress");
+        const coinValSpan = document.getElementById("coin-val");
+        const ecoValSpan = document.getElementById("eco-val");
+        const gameAlertDiv = document.getElementById("game-alert");
+
+        const btnWater = document.getElementById("btn-water");
+        const btnFertilize = document.getElementById("btn-fertilize");
+        const btnHarvest = document.getElementById("btn-harvest");
+
+        // Fungsi Audio Efek Sintetis (Web Audio API)
+        function playSound(type) {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'action') {
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+            } else if (type === 'harvest') {
+                osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+                setTimeout(() => osc.frequency.setValueAtTime(659.25, audioCtx.currentTime), 100); // E5
+                setTimeout(() => osc.frequency.setValueAtTime(783.99, audioCtx.currentTime), 200); // G5
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+            }
+        }
+
+        function perbaruiUI() {
+            growthProgressBar.style.width = progresPertumbuhan + "%";
+            coinValSpan.innerText = koin;
+            ecoValSpan.innerText = ecoScore;
+
+            if (progresPertumbuhan >= 100 && tahapStatus < 3) {
+                tahapStatus++;
+                progresPertumbuhan = 10;
+                
+                if (tahapStatus === 2) {
+                    sawitStageIcon.innerText = "🌴";
+                    plantStatusText.innerText = "SAWIT MUDA";
+                    gameAlertDiv.innerText = "Pohon sawit tumbuh besar! Terus rawat sampai berbuah.";
+                } else if (tahapStatus === 3) {
+                    sawitStageIcon.innerText = "🌴🥥";
+                    plantStatusText.innerText = "SIAP PANEN";
+                    gameAlertDiv.innerText = "Buah sawit sudah matang! Klik tombol PANEN di bawah.";
+                    
+                    btnWater.disabled = true;
+                    btnFertilize.disabled = true;
+                    btnHarvest.classList.add("active");
+                }
+            }
+        }
+
+        btnWater.addEventListener("click", function() {
+            if (tahapStatus < 3) {
+                playSound('action');
+                progresPertumbuhan = Math.min(100, progresPertumbuhan + 15);
+                ecoScore += 2;
+                gameAlertDiv.innerText = "Tanaman segar disiram air! (+15% Pertumbuhan)";
+                perbaruiUI();
+            }
+        });
+
+        btnFertilize.addEventListener("click", function() {
+            if (tahapStatus < 3) {
+                playSound('action');
+                progresPertumbuhan = Math.min(100, progresPertumbuhan + 25);
+                ecoScore += 5;
+                gameAlertDiv.innerText = "Pupuk unggul ditaburkan! (+25% Pertumbuhan)";
+                perbaruiUI();
+            }
+        });
+
+        btnHarvest.addEventListener("click", function() {
+            if (tahapStatus === 3) {
+                playSound('harvest');
+                koin += 500;
+                ecoScore += 10;
+                
+                // Reset kembali ke bibit awal setelah panen
+                tahapStatus = 1;
+                progresPertumbuhan = 10;
+                sawitStageIcon.innerText = "🌱";
+                plantStatusText.innerText = "BIBIT BARU";
+                gameAlertDiv.innerText = "Sukses Panen! Anda mendapatkan +500 Koin!";
+                
+                btnHarvest.classList.remove("active");
+                btnWater.disabled = false;
+                btnFertilize.disabled = false;
+                perbaruiUI();
+            }
+        });
+    </script>
+</body>
+</html>
